@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tebak Kata Bertingkat & Pelacak Kognitif</title>
+    <!-- Memuat Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .game-container { max-width: 800px; }
+        .letter-box { width: 3rem; height: 3rem; line-height: 3rem; background-color: #fff; border: 2px solid #3b82f6; }
+        .disabled { cursor: not-allowed; opacity: 0.6; }
+        .loading-ring { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 1s linear infinite; margin-right: 0.5rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .blinking { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="p-4 flex flex-col items-center min-h-screen bg-gray-100">
+
+    <!-- Kontainer Utama -->
+    <div class="game-container bg-white p-6 rounded-xl shadow-2xl mt-8 w-full">
+        <h1 class="text-3xl font-black text-center text-gray-800 mb-6">Tebak Kata Bertingkat ✨</h1>
+
+        <!-- Info Game dan Timer -->
+        <div class="bg-indigo-50 p-4 rounded-lg mb-4 flex justify-between items-center flex-wrap gap-4">
+            <p class="text-indigo-700 font-bold text-lg">Level: <span id="current-level" class="text-green-600 font-extrabold">1</span></p>
+            <p class="text-indigo-700 font-bold text-lg">Soal: <span id="question-count" class="text-green-600 font-extrabold">1</span>/10</p>
+            <p class="text-indigo-700 font-bold text-lg">Kesempatan: <span id="guesses-left" class="text-red-600">6</span></p>
+            <p class="text-indigo-700 font-bold text-lg">Salah: <span id="incorrect-count" class="text-orange-600">0</span></p>
+            <p class="text-indigo-700 font-bold text-2xl">Waktu: <span id="timer-display" class="text-blue-600 font-extrabold">60</span>s</p>
+        </div>
+        <div class="bg-blue-50 p-3 rounded-lg mb-4 text-center">
+            <p class="text-blue-800 font-extrabold text-xl">Skor Total: <span id="total-score" class="text-blue-600">0.0</span></p>
+        </div>
+
+
+        <!-- Display Kata -->
+        <div id="word-display" class="flex justify-center gap-2 mb-8 flex-wrap">
+            <!-- Kotak huruf akan diisi di sini oleh JS -->
+        </div>
+
+        <!-- Petunjuk Awal -->
+        <div class="bg-teal-100 border-l-4 border-teal-500 text-teal-700 p-4 mb-4 rounded-md">
+            <p class="font-bold">Kategori: <span id="category" class="text-teal-900 font-extrabold"></span></p>
+            <p id="clue-display" class="mt-1 italic"></p>
+        </div>
+
+        <!-- Input Tebak Huruf -->
+        <div class="flex gap-4 mb-6 items-center">
+            <input type="text" id="letter-input" maxlength="1" placeholder="Masukkan 1 huruf"
+                   class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-lg focus:border-blue-500 transition duration-150 uppercase" onkeydown="if(event.key === 'Enter') guessLetter()">
+            <button onclick="guessLetter()" id="guess-button"
+                    class="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition duration-150 shadow-md">
+                Tebak!
+            </button>
+        </div>
+        
+        <!-- Input Tebak Penuh Kata -->
+        <div class="border-t pt-4 mt-4">
+            <h3 class="text-xl font-semibold text-gray-700 mb-3">🚀 Tebak Penuh Kata (Verifikasi AI)</h3>
+            <div class="flex gap-4 mb-4 items-center">
+                <input type="text" id="word-guess-input" placeholder="Tebak seluruh kata..."
+                       class="flex-grow p-3 border-2 border-gray-300 rounded-lg text-lg focus:border-purple-500 transition duration-150 uppercase" onkeydown="if(event.key === 'Enter') verifyFullWord()">
+                <button onclick="verifyFullWord()" id="verify-button"
+                        class="bg-purple-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-purple-700 transition duration-150 shadow-md flex items-center">
+                    <span id="verify-text">Verifikasi Kata</span>
+                </button>
+            </div>
+            <p id="verification-result" class="text-sm italic text-gray-500 mt-2 min-h-[1.5rem]"></p>
+        </div>
+
+        <!-- Area Petunjuk Tambahan (Gemini API) -->
+        <div class="border-t pt-4 mt-4">
+            <h3 class="text-xl font-semibold text-gray-700 mb-3">🧠 Petunjuk Bantuan AI</h3>
+            <button onclick="getGeminiHint()" id="hint-button"
+                    class="bg-yellow-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-yellow-600 transition duration-150 shadow-md flex items-center mb-3">
+                <span id="hint-text">✨ Minta Petunjuk Tambahan</span>
+            </button>
+            <div id="gemini-hint" class="bg-yellow-50 p-3 rounded-md text-yellow-800 min-h-[2rem] italic text-sm"></div>
+        </div>
+
+        <!-- Area Pesan (Menang/Kalah) -->
+        <div id="message-box" class="mt-6 text-center text-2xl font-bold min-h-[8rem] flex flex-col justify-center items-center"></div>
+        
+        <!-- Tombol Aksi Akhir -->
+        <div class="text-center mt-6 flex justify-center gap-4">
+            <button onclick="nextQuestion()" id="next-question-button"
+                    class="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-blue-700 transition duration-150 shadow-xl hidden">
+                Lanjut ke Soal Berikutnya!
+            </button>
+            <button onclick="startGame(1)" id="restart-button"
+                    class="bg-green-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-green-700 transition duration-150 shadow-xl hidden">
+                Mulai Level 1 (Game Baru)
+            </button>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // --- Konstanta API ---
+        const apiKey = ""; // API Key for Gemini
+
+        // --- Data Kata (10 Level x 10 Kata = 100 Kata) ---
+        const wordListByLevel = {
+            // Level 1: 4-5 huruf, kata umum
+            1: [
+                { word: "KUCING", category: "Hewan", clue: "Hewan rumahan yang suka tidur dan mengeluarkan suara 'meong'." },
+                { word: "MEJA", category: "Perabotan", clue: "Benda berkaki empat tempat kita menaruh makanan atau buku." },
+                { word: "BUKU", category: "Pendidikan", clue: "Sumber informasi yang berisi tulisan dan gambar, terbuat dari kertas." },
+                { word: "PULPEN", category: "Alat Tulis", clue: "Benda untuk menulis dengan tinta, bukan pensil." },
+                { word: "GELAS", category: "Dapur", clue: "Wadah untuk menampung air minum, biasanya bening." },
+                { word: "RUMAH", category: "Bangunan", clue: "Tempat berlindung dan tinggal bersama keluarga." },
+                { word: "SIANG", category: "Waktu", clue: "Waktu ketika matahari berada di posisi tertinggi." },
+                { word: "JALAN", category: "Transportasi", clue: "Permukaan yang dilewati kendaraan dari satu tempat ke tempat lain." },
+                { word: "KOTA", category: "Geografi", clue: "Daerah besar yang penuh gedung dan penduduk padat." },
+                { word: "KUNCI", category: "Keamanan", clue: "Alat kecil untuk membuka atau mengunci pintu." }
+            ],
+            // Level 2: 5-6 huruf, kata umum
+            2: [
+                { word: "PANTAI", category: "Geografi", clue: "Tempat berbatasan antara daratan dan lautan, sering ada pasir." },
+                { word: "SEKOLAH", category: "Pendidikan", clue: "Tempat siswa belajar dan menuntut ilmu formal." },
+                { word: "KERETA", category: "Transportasi", clue: "Kendaraan panjang yang berjalan di atas rel besi." },
+                { word: "MIMPI", category: "Fisiologi", clue: "Pengalaman di alam bawah sadar saat kita tidur." },
+                { word: "GULAI", category: "Masakan", clue: "Makanan khas Padang dengan kuah kental, pedas, dan kaya rempah." },
+                { word: "LANGIT", category: "Alam", clue: "Area di atas bumi yang berwarna biru pada siang hari." },
+                { word: "PAPAN", category: "Material", clue: "Bahan bangunan yang terbuat dari kayu yang diratakan." },
+                { word: "BERENANG", category: "Olah Raga", clue: "Aktivitas bergerak di dalam air." },
+                { word: "JENDELA", category: "Bangunan", clue: "Bagian rumah yang bisa dibuka untuk melihat keluar dan masuknya udara." },
+                { word: "SAWAH", category: "Pertanian", clue: "Lahan berlumpur tempat menanam padi." }
+            ],
+            // Level 3: 6-7 huruf, sedikit lebih sulit
+            3: [
+                { word: "MENTARI", category: "Alam", clue: "Nama lain yang puitis untuk Matahari." },
+                { word: "KAMPUNG", category: "Geografi", clue: "Daerah pedesaan, berlawanan dengan kota." },
+                { word: "JEMBATAN", category: "Infrastruktur", clue: "Struktur yang dibangun di atas sungai atau jurang untuk menyeberang." },
+                { word: "TELEPON", category: "Komunikasi", clue: "Alat untuk berbicara jarak jauh, kini kebanyakan tanpa kabel." },
+                { word: "RESEP", category: "Masakan", clue: "Daftar bahan dan cara membuat suatu masakan atau obat." },
+                { word: "SEPEDA", category: "Transportasi", clue: "Kendaraan roda dua yang digerakkan dengan mengayuh pedal." },
+                { word: "SELIMUT", category: "Perabotan", clue: "Kain tebal yang dipakai untuk menghangatkan tubuh saat tidur." },
+                { word: "BAYANGAN", category: "Optik", clue: "Bentuk gelap yang tercipta ketika cahaya terhalang benda." },
+                { word: "PENGGARIS", category: "Alat Tulis", clue: "Benda yang digunakan untuk mengukur dan membuat garis lurus." },
+                { word: "TULISAN", category: "Komunikasi", clue: "Simbol yang merepresentasikan suara atau kata-kata." }
+            ],
+            // Level 4-10: Kata-kata yang lebih panjang dan kompleks
+            4: [
+                { word: "SAMUDRA", category: "Geografi", clue: "Lautan yang sangat luas dan dalam, seperti Pasifik atau Atlantik." },
+                { word: "KOMPUTER", category: "Teknologi", clue: "Mesin elektronik yang dapat memproses data dengan cepat dan akurat." },
+                { word: "PENAWARAN", category: "Ekonomi", clue: "Jumlah barang atau jasa yang tersedia di pasar pada harga tertentu." },
+                { word: "MELATI", category: "Flora", clue: "Bunga kecil berwarna putih, sangat harum, sering dipakai untuk upacara adat." },
+                { word: "BERLIBUR", category: "Aktivitas", clue: "Melakukan perjalanan untuk bersenang-senang atau beristirahat." },
+                { word: "PERISAI", category: "Sejarah", clue: "Alat pelindung diri yang dibawa oleh prajurit saat perang." },
+                { word: "PARAGRAF", category: "Penulisan", clue: "Kumpulan kalimat yang mengandung satu ide pokok." },
+                { word: "SEMARANG", category: "Geografi", clue: "Ibukota Provinsi Jawa Tengah." },
+                { word: "HARIMAU", category: "Fauna", clue: "Kucing besar dari Asia yang memiliki belang hitam dan oranye." },
+                { word: "PENGADILAN", category: "Hukum", clue: "Tempat untuk menyelesaikan sengketa hukum di hadapan hakim." }
+            ],
+            5: [
+                { word: "KEBAHAGIAAN", category: "Emosi", clue: "Perasaan senang dan puas yang mendalam." },
+                { word: "INTEGRITAS", category: "Karakter", clue: "Sifat jujur dan memiliki prinsip moral yang kuat." },
+                { word: "MATEMATIKA", category: "Ilmu", clue: "Ilmu tentang bilangan, ruang, dan perubahan." },
+                { word: "ATMOSFER", category: "Sains", clue: "Lapisan gas yang menyelimuti planet bumi." },
+                { word: "UNIVERSITAS", category: "Pendidikan", clue: "Institusi pendidikan tinggi setelah SMA." },
+                { word: "REVOLUSI", category: "Sejarah", clue: "Perubahan mendasar dalam kekuasaan atau struktur sosial dalam waktu singkat." },
+                { word: "PERPUSTAKAAN", category: "Literasi", clue: "Gedung atau ruangan yang menyimpan banyak koleksi buku untuk dipinjam." },
+                { word: "PERSETUJUAN", category: "Hubungan", clue: "Keadaan sepakat atau izin yang diberikan oleh pihak lain." },
+                { word: "KOMODITAS", category: "Ekonomi", clue: "Barang dagangan utama yang dapat dipertukarkan, seperti minyak atau kopi." },
+                { word: "PERKEMBANGAN", category: "Proses", clue: "Proses bertumbuh dan menjadi lebih maju atau matang." }
+            ],
+            6: [
+                { word: "KOMUNIKASI", category: "Sosial", clue: "Tindakan berbagi informasi atau pesan, baik lisan maupun tulisan." },
+                { word: "PARIWISATA", category: "Ekonomi", clue: "Kegiatan yang berhubungan dengan perjalanan dan layanan rekreasi." },
+                { word: "KONVENSI", category: "Acara", clue: "Pertemuan besar untuk membahas suatu topik khusus, seperti politik atau ilmiah." },
+                { word: "PERBAIKAN", category: "Aktivitas", clue: "Proses membuat sesuatu yang rusak menjadi berfungsi kembali." },
+                { word: "KETERAMPILAN", category: "Kemampuan", clue: "Kemampuan atau keahlian yang diperoleh melalui latihan." },
+                { word: "PENGEMBANGAN", category: "Proses", clue: "Upaya sistematis untuk meningkatkan atau memajukan suatu hal." },
+                { word: "STRATEGI", category: "Rencana", clue: "Rencana aksi yang dirancang untuk mencapai tujuan jangka panjang." },
+                { word: "KESEHATAN", category: "Fisiologi", clue: "Keadaan sejahtera dari fisik, mental, dan sosial." },
+                { word: "TRANSPORTASI", category: "Logistik", clue: "Sistem untuk memindahkan orang atau barang dari satu tempat ke tempat lain." },
+                { word: "KOSMOLOGI", category: "Sains", clue: "Ilmu yang mempelajari asal usul dan evolusi alam semesta." }
+            ],
+            7: [
+                { word: "ORGANISASI", category: "Struktur", clue: "Kelompok orang yang bekerja bersama untuk mencapai tujuan bersama." },
+                { word: "LABORATORIUM", category: "Sains", clue: "Ruangan yang dilengkapi untuk melakukan eksperimen ilmiah." },
+                { word: "KEWARGANEGARAAN", category: "Hukum", clue: "Status sebagai anggota resmi suatu negara." },
+                { word: "METAFISIKA", category: "Filsafat", clue: "Cabang filsafat yang menyelidiki sifat dasar keberadaan, kenyataan, dan realitas." },
+                { word: "IMPLEMENTASI", category: "Proses", clue: "Pelaksanaan atau penerapan suatu rencana atau kebijakan." },
+                { word: "TRANSFORMASI", category: "Perubahan", clue: "Perubahan bentuk atau sifat secara radikal dan menyeluruh." },
+                { word: "BIOLOGI", category: "Ilmu", clue: "Studi tentang kehidupan dan organisme hidup." },
+                { word: "KONSTRUKSI", category: "Teknik", clue: "Proses membangun atau membuat struktur besar seperti gedung atau jembatan." },
+                { word: "KERJA SAMA", category: "Sosial", clue: "Usaha bersama antara individu atau kelompok untuk mencapai tujuan." },
+                { word: "PREDIKSI", category: "Ramalan", clue: "Pernyataan tentang apa yang mungkin terjadi di masa depan." }
+            ],
+            8: [
+                { word: "EKOSISTEM", category: "Sains", clue: "Komunitas biologis organisme yang berinteraksi dengan lingkungan non-hidupnya." },
+                { word: "BIODIVERSITAS", category: "Sains", clue: "Keanekaragaman hayati atau berbagai jenis kehidupan di suatu wilayah." },
+                { word: "DETERMINASI", category: "Filosofi", clue: "Kekuatan mental untuk memutuskan suatu tindakan dan melaksanakannya." },
+                { word: "AKUNTABILITAS", category: "Etika", clue: "Tanggung jawab untuk menerima konsekuensi atas tindakan dan keputusan." },
+                { word: "KESEJAHTERAAN", category: "Sosial", clue: "Keadaan yang ditandai dengan kesehatan, kebahagiaan, dan kemakmuran." },
+                { word: "KLASIFIKASI", category: "Sistem", clue: "Pengaturan objek atau ide ke dalam kelompok atau kategori." },
+                { word: "EKSPLORASI", category: "Aktivitas", clue: "Tindakan melakukan perjalanan atau mencari untuk menemukan sesuatu." },
+                { word: "HIPOTESIS", category: "Sains", clue: "Dugaan awal yang dapat diuji berdasarkan bukti yang tersedia." },
+                { word: "INTERKONEKSI", category: "Hubungan", clue: "Hubungan atau koneksi timbal balik antara dua atau lebih hal." },
+                { word: "KOMPENSASI", category: "Ekonomi", clue: "Pembayaran yang diberikan kepada seseorang sebagai imbalan atas pekerjaan atau kerugian." }
+            ],
+            9: [
+                { word: "KONSTITUSIONAL", category: "Hukum", clue: "Sesuai dengan atau didasarkan pada konstitusi (undang-undang dasar) suatu negara." },
+                { word: "EKSISTENSIAL", category: "Filsafat", clue: "Berkaitan dengan atau menegaskan keberadaan seseorang atau sesuatu." },
+                { word: "DEINSTITUSIONALISASI", category: "Sosial", clue: "Proses menggantikan fasilitas jangka panjang dengan layanan berbasis komunitas." },
+                { word: "PEMERINTAHAN", category: "Politik", clue: "Sistem atau sekelompok orang yang mengelola suatu negara atau komunitas." },
+                { word: "KEPROFESIONALAN", category: "Etika", clue: "Tingkat kompetensi atau standar yang diharapkan dari seorang profesional." },
+                { word: "KONSOLIDASI", category: "Aksi", clue: "Tindakan menggabungkan beberapa hal menjadi satu kesatuan atau yang lebih kuat." },
+                { word: "LINGKUNGAN HIDUP", category: "Alam", clue: "Semua faktor alam dan sosial yang mengelilingi suatu organisme." },
+                { word: "KEBERLANJUTAN", category: "Etika", clue: "Kemampuan untuk mempertahankan kondisi atau proses pada tingkat tertentu secara terus-menerus." },
+                { word: "KONTEMPORER", category: "Waktu", clue: "Terjadi atau ada pada periode waktu yang sama atau sekarang." },
+                { word: "KOMPLEMENTER", category: "Relasi", clue: "Saling melengkapi atau membuat satu sama lain lebih baik." }
+            ],
+            10: [
+                { word: "ANTROPOLOGI", category: "Ilmu", clue: "Studi tentang manusia, masa lalu dan masa kini, di seluruh dunia." },
+                { word: "SISTEMATISASI", category: "Proses", clue: "Tindakan mengatur sesuatu sesuai dengan rencana atau metode." },
+                { word: "PRASANGKA", category: "Psikologi", clue: "Opini yang dibentuk sebelumnya, biasanya tidak berdasar atau negatif." },
+                { word: "AKSELERASI", category: "Fisika", clue: "Tingkat perubahan kecepatan suatu objek terhadap waktu." },
+                { word: "PENYELENGGARAAN", category: "Administrasi", clue: "Proses atau tindakan mengurus, mengelola, atau mengadakan suatu acara/kegiatan." },
+                { word: "TRANSENDENTAL", category: "Filsafat", clue: "Melampaui pengalaman biasa, di luar pemahaman normal." },
+                { word: "KUALIFIKASI", category: "Kriteria", clue: "Kondisi atau standar yang harus dipenuhi untuk suatu posisi atau tugas." },
+                { word: "SUBORDINASI", category: "Hubungan", clue: "Hubungan di mana satu hal dianggap kurang penting atau ditempatkan di bawah yang lain." },
+                { word: "DISTRIBUSI", category: "Ekonomi", clue: "Tindakan menyalurkan produk dari produsen ke konsumen." },
+                { word: "DEFENESTRASI", category: "Aksi (Rare)", clue: "Tindakan melempar seseorang keluar dari jendela (istilah sejarah yang jarang dipakai)." }
+            ]
+        };
+
+        // --- Variabel State Game Bertingkat ---
+        let secretWord = '';
+        let guessedLetters = new Set();
+        let guessesLeft = 0;
+        let incorrectGuesses = 0; 
+        let currentClue = '';
+        let currentCategory = '';
+        let gameActive = false;
+        
+        // State Progres Level
+        let currentLevel = 1; // Level 1 hingga 10
+        let questionIndex = 0; // Index 0 hingga 9 (nomor soal 1 hingga 10)
+        let totalCognitiveScore = 0; // Skor Kognitif Kumulatif
+        
+        // --- Variabel Timer ---
+        const START_TIME = 60; 
+        let timeRemaining = START_TIME;
+        let timerInterval;
+        const WIN_POINTS = 10; 
+        const MAX_LEVEL = 10;
+
+        // --- Referensi Elemen DOM ---
+        const wordDisplayEl = document.getElementById('word-display');
+        const guessesLeftEl = document.getElementById('guesses-left');
+        const incorrectCountEl = document.getElementById('incorrect-count');
+        const letterInputEl = document.getElementById('letter-input');
+        const guessButtonEl = document.getElementById('guess-button');
+        const messageBoxEl = document.getElementById('message-box');
+        const restartButtonEl = document.getElementById('restart-button');
+        const clueDisplayEl = document.getElementById('clue-display');
+        const categoryEl = document.getElementById('category');
+        const hintButtonEl = document.getElementById('hint-button');
+        const geminiHintEl = document.getElementById('gemini-hint');
+        const timerDisplayEl = document.getElementById('timer-display');
+        const totalScoreEl = document.getElementById('total-score');
+        const currentLevelEl = document.getElementById('current-level');
+        const questionCountEl = document.getElementById('question-count');
+        const nextQuestionButtonEl = document.getElementById('next-question-button');
+        
+        const wordGuessInputEl = document.getElementById('word-guess-input');
+        const verifyButtonEl = document.getElementById('verify-button');
+        const verificationResultEl = document.getElementById('verification-result');
+
+        // --- Fungsi Timer ---
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timeRemaining = START_TIME;
+            timerDisplayEl.textContent = timeRemaining;
+            timerDisplayEl.classList.remove('blinking', 'text-red-600');
+
+            timerInterval = setInterval(() => {
+                if (!gameActive) {
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                timeRemaining--;
+                timerDisplayEl.textContent = timeRemaining;
+
+                if (timeRemaining <= 10) {
+                    timerDisplayEl.classList.add('blinking', 'text-red-600');
+                }
+
+                if (timeRemaining <= 0) {
+                    endQuestion(false, "Waktu habis!");
+                }
+            }, 1000);
+        }
+
+        /**
+         * Memulai game baru (jika level = 1) atau soal baru.
+         * @param {number} startLevel - Level untuk memulai (biasanya 1).
+         */
+        function startGame(startLevel) {
+            if (startLevel === 1) {
+                currentLevel = 1;
+                questionIndex = 0;
+                totalCognitiveScore = 0;
+            }
+            startQuestion();
+        }
+
+        /**
+         * Memulai soal/kata baru dalam level saat ini.
+         */
+        function startQuestion() {
+            // Pastikan Level ada
+            const levelWords = wordListByLevel[currentLevel];
+            if (!levelWords || questionIndex >= levelWords.length) {
+                // Seharusnya tidak terjadi, langsung panggil endGame jika logika Level/Index salah
+                endGame("Level", "Terjadi kesalahan Level atau sudah mencapai akhir game!");
+                return;
+            }
+
+            const wordObj = levelWords[questionIndex];
+            
+            secretWord = wordObj.word.toUpperCase();
+            currentClue = wordObj.clue;
+            currentCategory = wordObj.category;
+            
+            guessedLetters = new Set();
+            guessesLeft = 6;
+            incorrectGuesses = 0; 
+            gameActive = true;
+
+            // Reset UI
+            messageBoxEl.textContent = `Level ${currentLevel}: Soal ${questionIndex + 1}. Tebak sekarang!`;
+            messageBoxEl.classList.remove('text-green-600', 'text-red-600', 'text-yellow-600');
+            nextQuestionButtonEl.classList.add('hidden');
+            restartButtonEl.classList.add('hidden');
+
+            letterInputEl.value = '';
+            wordGuessInputEl.value = '';
+            letterInputEl.disabled = false;
+            guessButtonEl.disabled = false;
+            hintButtonEl.disabled = false;
+            verifyButtonEl.disabled = false;
+            verificationResultEl.textContent = '';
+            geminiHintEl.textContent = 'Tekan tombol di atas untuk mendapatkan petunjuk tambahan dari AI.';
+
+            // Update Info Game
+            currentLevelEl.textContent = currentLevel;
+            currentLevelEl.classList.remove('text-red-600');
+            currentLevelEl.classList.add('text-green-600');
+            questionCountEl.textContent = questionIndex + 1;
+            categoryEl.textContent = currentCategory;
+            clueDisplayEl.textContent = currentClue;
+            guessesLeftEl.textContent = guessesLeft;
+            incorrectCountEl.textContent = incorrectGuesses;
+            totalScoreEl.textContent = totalCognitiveScore.toFixed(1);
+
+            renderWord();
+            startTimer(); // Mulai timer
+        }
+
+        /**
+         * Mengakhiri satu soal, menghitung skor, dan menyiapkan UI untuk soal/level berikutnya.
+         * @param {boolean} won - Status menang atau kalah.
+         * @param {string} reason - Alasan soal berakhir.
+         */
+        function endQuestion(won, reason) {
+            gameActive = false;
+            clearInterval(timerInterval); // Hentikan timer
+
+            // Nonaktifkan semua input
+            letterInputEl.disabled = true;
+            guessButtonEl.disabled = true;
+            hintButtonEl.disabled = true;
+            verifyButtonEl.disabled = true;
+
+            let questionScore = 0;
+
+            if (won) {
+                // Formula Skor Kognitif (per soal):
+                // 10 + (Waktu Sisa * 0.1) - (Kesalahan * 0.5)
+                // Score dibatasi minimal 1
+                questionScore = Math.max(1, WIN_POINTS + (timeRemaining * 0.1) - (incorrectGuesses * 0.5));
+                totalCognitiveScore += questionScore;
+                
+                messageBoxEl.classList.remove('text-red-600', 'text-yellow-600');
+                messageBoxEl.classList.add('text-green-600');
+                messageBoxEl.textContent = `${reason}. Anda mendapatkan ${questionScore.toFixed(1)} poin.`;
+
+                // Tampilkan tombol Lanjut
+                nextQuestionButtonEl.classList.remove('hidden');
+
+            } else {
+                messageBoxEl.classList.remove('text-green-600', 'text-yellow-600');
+                messageBoxEl.classList.add('text-red-600');
+                messageBoxEl.textContent = `${reason}. Kata yang benar adalah: ${secretWord}. Skor Level Anda: GAGAL`;
+                
+                // Jika kalah, game berakhir
+                endGame("Kalah", `Anda gagal di Level ${currentLevel}, Soal ${questionIndex + 1}.`);
+                return; // Langsung keluar
+            }
+
+            // Update UI Score
+            totalScoreEl.textContent = totalCognitiveScore.toFixed(1);
+            
+            // Periksa apakah ini soal terakhir di Level 10
+            if (currentLevel === MAX_LEVEL && questionIndex === wordListByLevel[MAX_LEVEL].length - 1) {
+                 endGame("Menang", "SELAMAT! Anda telah menyelesaikan semua 10 Level!");
+            }
+        }
+        
+        /**
+         * Melanjutkan ke soal berikutnya atau level berikutnya.
+         */
+        function nextQuestion() {
+            questionIndex++;
+
+            if (questionIndex >= wordListByLevel[currentLevel].length) {
+                // Selesai 10 pertanyaan di level saat ini
+                if (currentLevel < MAX_LEVEL) {
+                    currentLevel++;
+                    questionIndex = 0; // Reset index untuk level baru
+                    messageBoxEl.textContent = `Level ${currentLevel} DIBUKA! Soal-soal sekarang lebih sulit.`;
+                    setTimeout(startQuestion, 2000);
+                } else {
+                    // Semua Level selesai
+                    endGame("Menang", "SELAMAT! Anda telah menyelesaikan semua 10 Level!");
+                }
+            } else {
+                startQuestion();
+            }
+        }
+
+        /**
+         * Menentukan gelar berdasarkan skor total.
+         */
+        function getRank(score) {
+            let title = "";
+            let encouragement = "";
+
+            if (score < 350) {
+                title = "Shadow Rookie";
+                encouragement = "Semua ahli pernah menjadi pemula! Asah terus kemampuanmu untuk tantangan berikutnya!";
+            } else if (score >= 350 && score <= 700) {
+                title = "Word Striker";
+                encouragement = "Luar biasa! Konsentrasimu tajam. Kamu tinggal selangkah lagi menuju puncak!";
+            } else { // score > 700
+                title = "Lexicon Overlord";
+                encouragement = "Tak tertandingi! Kekuatan bahasamu adalah legenda. Teruslah berkuasa!";
+            }
+
+            return { title, encouragement };
+        }
+
+
+        /**
+         * Mengakhiri seluruh sesi permainan (dipanggil saat kalah total atau menang total).
+         * @param {string} status - "Menang" (selesai semua) atau "Kalah" (kesempatan/waktu habis).
+         * @param {string} finalMessage - Pesan akhir.
+         */
+        function endGame(status, finalMessage) {
+            gameActive = false;
+            clearInterval(timerInterval);
+
+            // Sembunyikan tombol lanjut
+            nextQuestionButtonEl.classList.add('hidden');
+            
+            // Tampilkan tombol restart
+            restartButtonEl.classList.remove('hidden');
+
+            // Dapatkan gelar dan pesan
+            const { title, encouragement } = getRank(totalCognitiveScore);
+            
+            // Tampilkan Skor Akhir dan Gelar
+            let finalMessageHtml = `<span class="text-3xl font-bold text-gray-800">${finalMessage}</span><br>
+                                    <span class="text-xl font-semibold mt-4 text-gray-700">Gelar Pencapaianmu:</span>
+                                    <span class="text-5xl font-black mt-2 text-purple-700">${title}</span>
+                                    <p class="mt-4 text-lg italic text-gray-600">${encouragement}</p>`;
+            
+            messageBoxEl.innerHTML = finalMessageHtml;
+            currentLevelEl.textContent = currentLevel;
+            currentLevelEl.classList.remove('text-green-600');
+            currentLevelEl.classList.add('text-red-600');
+        }
+
+
+        /**
+         * Merender tampilan kata yang ditebak.
+         */
+        function renderWord() {
+            wordDisplayEl.innerHTML = '';
+            let wordComplete = true;
+
+            for (const letter of secretWord) {
+                const box = document.createElement('span');
+                box.className = 'letter-box mx-1 rounded-lg text-2xl font-mono font-bold uppercase flex items-center justify-center';
+                
+                if (guessedLetters.has(letter)) {
+                    box.textContent = letter;
+                    box.classList.add('bg-blue-100', 'text-blue-800');
+                } else {
+                    box.textContent = '_';
+                    box.classList.add('bg-gray-200', 'text-gray-400');
+                    wordComplete = false;
+                }
+                wordDisplayEl.appendChild(box);
+            }
+
+            if (wordComplete && gameActive) {
+                endQuestion(true, "Anda berhasil menebak kata!");
+            }
+        }
+
+        /**
+         * Logika menebak satu huruf.
+         */
+        function guessLetter() {
+            if (!gameActive) return;
+
+            const input = letterInputEl.value.trim().toUpperCase();
+            letterInputEl.value = ''; // Clear input
+
+            if (input.length !== 1 || !/^[A-Z]$/.test(input)) {
+                messageBoxEl.textContent = 'Masukkan hanya SATU huruf yang valid.';
+                messageBoxEl.classList.remove('text-green-600', 'text-red-600');
+                messageBoxEl.classList.add('text-yellow-600');
+                return;
+            }
+
+            if (guessedLetters.has(input)) {
+                messageBoxEl.textContent = `Huruf '${input}' sudah pernah ditebak.`;
+                messageBoxEl.classList.remove('text-green-600', 'text-red-600');
+                messageBoxEl.classList.add('text-yellow-600');
+                return;
+            }
+
+            guessedLetters.add(input);
+
+            if (secretWord.includes(input)) {
+                messageBoxEl.textContent = `TEBAKAN BENAR! Huruf '${input}' ada di kata.`;
+                messageBoxEl.classList.remove('text-red-600', 'text-yellow-600');
+                messageBoxEl.classList.add('text-green-600');
+            } else {
+                guessesLeft--;
+                incorrectGuesses++; // Hitung salah
+                messageBoxEl.textContent = `TEBAKAN SALAH! Huruf '${input}' tidak ada.`;
+                messageBoxEl.classList.remove('text-green-600', 'text-yellow-600');
+                messageBoxEl.classList.add('text-red-600');
+                guessesLeftEl.textContent = guessesLeft;
+                incorrectCountEl.textContent = incorrectGuesses;
+            }
+
+            renderWord();
+
+            if (guessesLeft <= 0 && gameActive) {
+                endQuestion(false, "Kesempatan menebak habis.");
+            }
+        }
+        
+        /**
+         * Logika menebak seluruh kata menggunakan verifikasi AI.
+         */
+        async function verifyFullWord() {
+            if (!gameActive) return;
+
+            const guess = wordGuessInputEl.value.trim().toUpperCase();
+            
+            if (guess.length === 0) {
+                verificationResultEl.textContent = 'Masukkan tebakan kata penuh.';
+                return;
+            }
+
+            if (guess === secretWord) {
+                wordGuessInputEl.value = secretWord;
+                endQuestion(true, "Anda berhasil menebak seluruh kata!");
+                return;
+            }
+
+            // Aktifkan loading
+            const originalButtonContent = verifyButtonEl.innerHTML;
+            verifyButtonEl.innerHTML = '<span class="loading-ring"></span> <span id="verify-text">Menganalisis...</span>';
+            verifyButtonEl.disabled = true;
+
+            const systemPrompt = `Anda adalah ahli semantik dalam permainan tebak kata. Tugas Anda adalah membandingkan tebakan pengguna dengan kata rahasia. Jangan pernah mengungkapkan kata rahasia atau huruf apa pun. Berikan umpan balik yang membantu dan bersemangat tentang seberapa 'dekat' tebakan mereka dengan kata rahasia, berdasarkan arti, kategori, atau konteks. Tanggapan Anda harus dalam Bahasa Indonesia, ringkas, maksimal dua kalimat.`;
+            const userQuery = `Kata Rahasia: ${secretWord}, Kategori: ${currentCategory}, Tebakan Penuh Pengguna: ${guess}. Bandingkan keduanya.`;
+
+            try {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                };
+                
+                // Implementasi Exponential Backoff
+                let response;
+                let delay = 1000;
+                const maxRetries = 5;
+
+                for (let i = 0; i < maxRetries; i++) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status !== 429 && response.status < 500) {
+                        break; 
+                    }
+
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; 
+                    }
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const aiResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, AI gagal memverifikasi. Coba lagi.";
+                
+                verificationResultEl.textContent = aiResponse;
+                
+                // Mengurangi satu kesempatan setelah verifikasi
+                guessesLeft--;
+                incorrectGuesses++;
+                guessesLeftEl.textContent = guessesLeft;
+                incorrectCountEl.textContent = incorrectGuesses;
+                
+                if (guessesLeft <= 0 && gameActive) {
+                    endQuestion(false, "Kesempatan menebak habis setelah verifikasi.");
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                verificationResultEl.textContent = "Terjadi kesalahan saat memanggil AI. Coba lagi.";
+            } finally {
+                verifyButtonEl.innerHTML = originalButtonContent;
+                verifyButtonEl.disabled = false;
+                wordGuessInputEl.value = '';
+            }
+        }
+
+        /**
+         * Logika meminta petunjuk tambahan dari AI.
+         */
+        async function getGeminiHint() {
+            if (!gameActive) return;
+
+            const originalButtonContent = hintButtonEl.innerHTML;
+            hintButtonEl.innerHTML = '<span class="loading-ring"></span> <span id="hint-text">AI sedang berpikir...</span>';
+            hintButtonEl.disabled = true;
+            geminiHintEl.textContent = ''; 
+
+            const systemPrompt = "Anda adalah pembuat petunjuk ulung dalam permainan tebak kata. Tugas Anda adalah memberikan petunjuk kedua yang lebih mendalam untuk sebuah kata rahasia, tetapi JANGAN PERNAH mengungkapkan kata rahasia atau huruf apa pun. Pastikan petunjuk Anda dalam Bahasa Indonesia, ringkas, dan sangat membantu, mengacu pada sifat atau fungsi kata tersebut.";
+            const userQuery = `Kata Rahasia: ${secretWord}, Kategori: ${currentCategory}, Petunjuk Awal: ${currentClue}. Buatkan petunjuk tambahan yang berwawasan.`;
+
+            try {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                };
+
+                // Implementasi Exponential Backoff
+                let response;
+                let delay = 1000;
+                const maxRetries = 5;
+
+                for (let i = 0; i < maxRetries; i++) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status !== 429 && response.status < 500) {
+                        break; 
+                    }
+
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; 
+                    }
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const aiHint = result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, Gemini gagal menghasilkan petunjuk.";
+                
+                geminiHintEl.textContent = 'Petunjuk Tambahan AI: ' + aiHint;
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                geminiHintEl.textContent = "Terjadi kesalahan saat meminta petunjuk AI.";
+            } finally {
+                hintButtonEl.innerHTML = originalButtonContent;
+                hintButtonEl.disabled = true; 
+            }
+        }
+
+        // --- EXPOSE FUNCTIONS GLOBALLY (PENTING UNTUK ONCLICK HTML) ---
+        window.startGame = startGame;
+        window.guessLetter = guessLetter;
+        window.verifyFullWord = verifyFullWord;
+        window.getGeminiHint = getGeminiHint;
+        window.nextQuestion = nextQuestion;
+
+        // Mulai game saat halaman dimuat
+        startGame(1);
+    </script>
+</body>
+</html>
